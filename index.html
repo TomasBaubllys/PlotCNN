@@ -68,12 +68,12 @@ function bb(n){if(is3(n)){const k=n.z/2,fx=n.x-k/2,fy=n.y+k/2;return{l:fx-n.th/2
 function dir(a,b){const A=bb(a),B=bb(b),dx=B.cx-A.cx,dy=B.cy-A.cy;return Math.abs(dx)>=Math.abs(dy)?(dx>=0?['east','west']:['west','east']):(dy>=0?['south','north']:['north','south'])}
 function sp(n,s){const q=bb(n);return{east:{x:q.r,y:q.cy},west:{x:q.l,y:q.cy},north:{x:q.cx,y:q.t},south:{x:q.cx,y:q.b}}[s]}
 const an=(n,s)=>is3(n)?`n${n.id}-${s}`:`n${n.id}.${s}`;
-function tA(a,b,f){const n=f?a:b,s=dir(a,b)[f?0:1];return is3(n)?`n${n.id}-${s}`:`n${n.id}.${s}`}
+function tA(a,b,f){const n=f?a:b;const side=dir(a,b)[f?0:1];return is3(n)?`n${n.id}-${side}`:`n${n.id}.${side}`}
 function geo(e){const a=nd(e.a),b=nd(e.b);if(!a||!b)return null;const A=bb(a),B=bb(b);
 if(!e.curve){const A3=is3(a),B3=is3(b),[s1,s2]=dir(a,b),p=A3?sp(a,s1):bd0(a,b.x,b.y),q=B3?sp(b,s2):bd0(b,a.x,a.y);return{d:`M${p.x},${p.y}L${q.x},${q.y}`,m:{x:(p.x+q.x)/2,y:(p.y+q.y)/2},H:0}}
 const dx=Math.abs(B.cx-A.cx),dy=Math.abs(B.cy-A.cy);
 if(dx>=dy){const p={x:A.cx,y:A.t},q={x:B.cx,y:B.t},t=Math.min(p.y,q.y)-40-dx*.1;return{d:`M${p.x},${p.y}C${p.x},${t} ${q.x},${t} ${q.x},${q.y}`,m:{x:(p.x+q.x)/2,y:(p.y+q.y)/2*.25+t*.75},H:1}}
-const p={x:A.r,y:A.cy},q={x:B.r,y:B.cy},r=Math.max(p.x,q.x)+40+dy*.1;return{d:`M${p.x},${p.y}C${r},${p.y} ${r},${q.y} ${q.x},${q.y}`,m:{x:(p.x+q.x)/2*.25+r*.75,y:(p.y+q.y)/2},H:0}}
+const side=B.cx>=A.cx?'east':'west',p=sp(a,side),q=sp(b,side),sign=side==='east'?1:-1,r=(side==='east'?Math.max(p.x,q.x):Math.min(p.x,q.x))+sign*(40+dy*.1);return{d:`M${p.x},${p.y}C${r},${p.y} ${r},${q.y} ${q.x},${q.y}`,m:{x:(p.x+q.x)/2*.25+r*.75,y:(p.y+q.y)/2},H:0}}
 function cub(n,s){const q=bb(n),k=q.k,c=n.color,fl=q.fx-n.th/2,fr=q.fx+n.th/2,ft=q.fy-n.hh/2,fb=q.fy+n.hh/2,st=`stroke="${s?'#2563eb':'#333'}" stroke-width="${s?2.2:1.2}" stroke-linejoin="round"`;
 const P=(p,sh)=>`<polygon points="${p}" fill="${c}" ${st}/>`+(sh?`<polygon points="${p}" fill="${sh[0]}" fill-opacity="${sh[1]}"/>`:'');
 return P(`${fl},${fb} ${fr},${fb} ${fr},${ft} ${fl},${ft}`)+P(`${fl},${ft} ${fr},${ft} ${fr+k},${ft-k} ${fl+k},${ft-k}`,['#fff',.45])+P(`${fr},${fb} ${fr+k},${fb-k} ${fr+k},${ft-k} ${fr},${ft}`,['#000',.2])+`<text x="${q.cx}" y="${q.b+14}" text-anchor="middle" font-size="11" fill="currentColor">${x(n.label)}</text>`+(n.sub?`<text x="${q.cx}" y="${q.b+26}" text-anchor="middle" font-size="10" fill="currentColor" opacity=".7">${x(n.sub)}</text>`:'')}
@@ -121,7 +121,7 @@ o+='\n';
 for(const e of S.edges){const a=nd(e.a),b=nd(e.b);if(!a||!b)continue;const A='n'+a.id,B='n'+b.id,op=e.dash?'->, dashed':'->',lb=e.label?` node[midway, ${e.curve&&geo(e).H?'above':'above'}, font=\\scriptsize] {${esc(e.label)}}`:'';
 if(!e.curve)o+=`\\draw[${op}] (${tA(a,b,1)}) --${lb} (${tA(a,b,0)});\n`;
 else if(geo(e).H)o+=`\\draw[${op}] (${an(a,'north')}) to[out=90, in=90, looseness=1.3]${lb} (${an(b,'north')});\n`;
-else o+=`\\draw[${op}] (${an(a,'east')}) to[out=0, in=0, looseness=1.5]${lb} (${an(b,'east')});\n`}
+else {const side=b.x>=a.x?'east':'west',ang=side==='east'?0:180;o+=`\\draw[${op}] (${an(a,side)}) to[out=${ang}, in=${ang}, looseness=1.5]${lb} (${an(b,side)});\n`}}
 const defs=Object.entries(cols).map(([c,n])=>`\\definecolor{${n}}{HTML}{${c.slice(1).toUpperCase()}}\n`).join('');
 let r=`${defs}\\begin{tikzpicture}[>={Stealth[length=2mm]}, font=\\small]\n${o}\\end{tikzpicture}\n`;
 if($('#sa').checked)r=`\\documentclass[tikz,border=5pt]{standalone}\n\\usepackage{xcolor}\n\\usetikzlibrary{arrows.meta}\n\\begin{document}\n${r}\\end{document}\n`;else r=`% needs: \\usepackage{tikz,xcolor} \\usetikzlibrary{arrows.meta}\n`+r;
