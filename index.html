@@ -68,7 +68,7 @@ function bb(n){if(is3(n)){const k=n.z/2,fx=n.x-k/2,fy=n.y+k/2;return{l:fx-n.th/2
 function dir(a,b){const A=bb(a),B=bb(b),dx=B.cx-A.cx,dy=B.cy-A.cy;return Math.abs(dx)>=Math.abs(dy)?(dx>=0?['east','west']:['west','east']):(dy>=0?['south','north']:['north','south'])}
 function sp(n,s){const q=bb(n);return{east:{x:q.r,y:q.cy},west:{x:q.l,y:q.cy},north:{x:q.cx,y:q.t},south:{x:q.cx,y:q.b}}[s]}
 const an=(n,s)=>is3(n)?`n${n.id}-${s}`:`n${n.id}.${s}`;
-function tA(a,b,f){const n=f?a:b;return is3(n)?`n${n.id}-${dir(a,b)[f?0:1]}`:'n'+n.id}
+function tA(a,b,f){const n=f?a:b,s=dir(a,b)[f?0:1];return is3(n)?`n${n.id}-${s}`:`n${n.id}.${s}`}
 function geo(e){const a=nd(e.a),b=nd(e.b);if(!a||!b)return null;const A=bb(a),B=bb(b);
 if(!e.curve){const A3=is3(a),B3=is3(b),[s1,s2]=dir(a,b),p=A3?sp(a,s1):bd0(a,b.x,b.y),q=B3?sp(b,s2):bd0(b,a.x,a.y);return{d:`M${p.x},${p.y}L${q.x},${q.y}`,m:{x:(p.x+q.x)/2,y:(p.y+q.y)/2},H:0}}
 const dx=Math.abs(B.cx-A.cx),dy=Math.abs(B.cy-A.cy);
