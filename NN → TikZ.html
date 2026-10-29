@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>NN → TikZ</title>
+<style>
+:root{--bg:#f7f7f5;--fg:#1c1c1a;--pn:#fff;--bd:#d8d8d2;--cv:#fff;--ac:#2563eb;--grid:#ececE6;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#161615;--fg:#e8e8e3;--pn:#21211f;--bd:#3a3a36;--cv:#1b1b1a;--ac:#6ea0ff;--grid:#262624;color-scheme:dark}}
+:root[data-theme="dark"]{--bg:#161615;--fg:#e8e8e3;--pn:#21211f;--bd:#3a3a36;--cv:#1b1b1a;--ac:#6ea0ff;--grid:#262624;color-scheme:dark}
+*{box-sizing:border-box}html,body{height:100%;margin:0}
+body{background:var(--bg);color:var(--fg);font:14px/1.4 system-ui,-apple-system,"Segoe UI",sans-serif;display:flex;flex-direction:column}
+header{padding:8px 12px;border-bottom:1px solid var(--bd);display:flex;gap:8px;flex-wrap:wrap;align-items:center;background:var(--pn)}
+header b{margin-right:8px}
+button,input,textarea{font:inherit;color:inherit}
+button{background:var(--pn);border:1px solid var(--bd);border-radius:6px;padding:4px 10px;cursor:pointer}
+button:hover{border-color:var(--ac)}
+main{flex:1;display:flex;min-height:0}
+#pal{width:140px;padding:8px;border-right:1px solid var(--bd);background:var(--pn);overflow:auto;display:flex;flex-direction:column;gap:5px}
+#pal button{text-align:left;display:flex;align-items:center;gap:6px}
+#pal i{width:12px;height:12px;border-radius:3px;border:1px solid #0004;display:inline-block}
+#cv{flex:1;overflow:auto;background:var(--cv)}
+svg{display:block;background-image:linear-gradient(var(--grid) 1px,transparent 1px),linear-gradient(90deg,var(--grid) 1px,transparent 1px);background-size:20px 20px;user-select:none}
+#side{width:340px;border-left:1px solid var(--bd);background:var(--pn);display:flex;flex-direction:column;min-height:0}
+#props{padding:10px;border-bottom:1px solid var(--bd);font-size:13px}
+#props label{display:flex;justify-content:space-between;align-items:center;gap:8px;margin:4px 0}
+#props input[type=text],#props input[type=number]{width:170px;background:var(--bg);border:1px solid var(--bd);border-radius:4px;padding:2px 6px}
+#props input[type=number]{width:70px}
+#out{flex:1;min-height:120px;margin:8px;font:12px/1.35 ui-monospace,Menlo,monospace;background:var(--bg);border:1px solid var(--bd);border-radius:6px;padding:8px;resize:none}
+.row{display:flex;gap:8px;align-items:center;padding:0 8px 8px;flex-wrap:wrap}
+.node:hover .h,.node.sel .h{opacity:1}.h{opacity:0;cursor:crosshair;fill:var(--ac)}
+.hint{font-size:12px;opacity:.7;padding:6px 10px}select{font:inherit;color:inherit;background:var(--pn);border:1px solid var(--bd);border-radius:6px;padding:4px 6px}header button:active{transform:translateY(1px)}#props{max-height:46%;overflow:auto}
+@media (max-width:800px){main{flex-direction:column}#pal{width:auto;flex-direction:row;flex-wrap:wrap}#side{width:auto;height:45%}}
+</style></head><body>
+<header><b>NN → TikZ</b>
+<label><input type="checkbox" id="d3" checked> 3D blocks (PlotNeuralNet style)</label> <label><input type="checkbox" id="curve"> new edges are curved skip/residual</label>
+<button id="ex1">Example: ResNet block</button><button id="ex2">Example: Transformer</button>
+<select id="mods"><option value="">+ Insert module…</option><option value="simam">SimAM attention</option><option value="se">SE (squeeze-excite)</option><option value="eca">ECA attention</option><option value="cbam">CBAM</option><option value="mhsa">Multi-head self-attention</option><option value="transformer">Transformer encoder block</option><option value="res">Residual block</option></select>
+<button id="un" title="Ctrl+Z">Undo</button><button id="re" title="Ctrl+Y">Redo</button><button id="dp" title="Ctrl+D">Duplicate</button>
+<button id="del">Delete selected</button><button id="clr">Clear</button>
+<button id="sv">Copy JSON</button><button id="ld">Load JSON</button></header>
+<main>
+<div id="pal"></div>
+<div id="cv"><svg id="svg" width="2000" height="2000"></svg></div>
+<div id="side"><div id="props"></div>
+<div class="hint">Drag from a node’s right-hand dot to another node to connect. Tick “curved” to make a residual/skip arc. Shortcuts: Ctrl+Z/Y undo/redo, Ctrl+D duplicate, arrows nudge (Shift = bigger), Del removes.</div>
+<textarea id="out" readonly></textarea>
+<div class="row"><button id="cp">Copy TikZ</button><label><input type="checkbox" id="sa"> standalone document</label></div></div>
+</main>
+<script>
+const $=s=>document.querySelector(s),svg=$('#svg');
+const T={input:{label:'Input',color:'#dbeafe',w:84,h:36},dense:{label:'Linear',color:'#fde68a',w:84,h:36},conv:{label:'Conv 3×3',color:'#fecaca',w:84,h:36},pool:{label:'Pool',color:'#bbf7d0',w:84,h:36},attn:{label:'Attention',color:'#e9d5ff',w:96,h:36},norm:{label:'LayerNorm',color:'#e5e7eb',w:84,h:36},act:{label:'ReLU',color:'#fed7aa',w:84,h:36},add:{label:'+',color:'#ffffff',w:28,h:28,circ:1},concat:{label:'C',color:'#ffffff',w:28,h:28,circ:1},output:{label:'Output',color:'#cffafe',w:84,h:36},text:{label:'Text',color:'#ffffff',w:60,h:24,plain:1},group:{label:'×N',color:'#ffffff',w:300,h:120,group:1}};
+const N={add:'Add (⊕)',concat:'Concat',group:'Group ×N',attn:'Attention',norm:'Norm',act:'Activation',dense:'Linear',conv:'Conv',pool:'Pool',input:'Input',output:'Output',text:'Text'};
+const S3={input:[4,110,110],dense:[12,90,12],conv:[18,90,70],pool:[10,64,50],attn:[34,90,60],norm:[6,90,70],act:[6,90,70],output:[12,70,12]};const oc={color:'#ffffff',w:28,h:28,circ:1};Object.assign(T,{mul:{label:'⊗',...oc},mat:{label:'×',...oc},sub:{label:'−',...oc},sig:{label:'σ',...oc},tanh:{label:'tanh',color:'#ffffff',w:40,h:40,circ:1},op:{label:'⊙',...oc},soft:{label:'Softmax',color:'#fbcfe8',w:84,h:36}});Object.assign(N,{mul:'Multiply (⊗)',mat:'MatMul (×)',sub:'Subtract (−)',sig:'Sigmoid (σ)',tanh:'Tanh',op:'Operator',soft:'Softmax'});S3.soft=[6,90,70];const OPS={'+':'$+$','⊕':'$\\oplus$','⊗':'$\\otimes$','⊙':'$\\odot$','×':'$\\times$','−':'$-$','÷':'$\\div$','σ':'$\\sigma$','tanh':'$\\tanh$'};for(const k in S3)T[k].s=S3[k];
+let S={nodes:[],edges:[],sel:null,uid:1},drag=null,cnt=0;
+const nd=id=>S.nodes.find(n=>n.id==id);
+function addNode(t,x,y,o={}){const d=T[t],n={id:S.uid++,type:t,x,y,w:d.w,h:d.h,label:d.label,sub:'',color:d.color,th:d.s?d.s[0]:0,hh:d.s?d.s[1]:0,z:d.s?d.s[2]:0,...o};S.nodes.push(n);return n}
+function addEdge(a,b,curve=false,o={}){if(a==b||S.edges.some(e=>e.a==a&&e.b==b))return;const e={id:S.uid++,a,b,curve,dash:false,label:'',...o};S.edges.push(e);return e}
+$('#pal').innerHTML=Object.keys(N).map(k=>`<button data-t="${k}"><i style="background:${T[k].color}"></i>${N[k]}</button>`).join('');
+$('#pal').onclick=e=>{const b=e.target.closest('button');if(!b)return;hist();const n=addNode(b.dataset.t,160+(cnt++%8)*30,100+(cnt%8)*30);S.sel=n;all()};
+const snap=v=>Math.round(v/10)*10,esc=s=>/\$/.test(s)?s:OPS[s]?OPS[s]:s.replace(/([_%&#{}])/g,'\\$1').replace(/×/g,'$\\times$');
+function bd0(n,tx,ty){const dx=tx-n.x,dy=ty-n.y;if(!dx&&!dy)return{x:n.x,y:n.y};if(T[n.type].circ){const l=Math.hypot(dx,dy),r=n.w/2;return{x:n.x+dx/l*r,y:n.y+dy/l*r}}const t=Math.min(dx?n.w/2/Math.abs(dx):1e9,dy?n.h/2/Math.abs(dy):1e9);return{x:n.x+dx*t,y:n.y+dy*t}}
+function geo0(e){const a=nd(e.a),b=nd(e.b);if(!a||!b)return null;
+if(!e.curve){const p=bd(a,b.x,b.y),q=bd(b,a.x,a.y);return{d:`M${p.x},${p.y}L${q.x},${q.y}`,m:{x:(p.x+q.x)/2,y:(p.y+q.y)/2},H:0}}
+const dx=Math.abs(b.x-a.x),dy=Math.abs(b.y-a.y);
+if(dx>=dy){const p={x:a.x,y:a.y-a.h/2},q={x:b.x,y:b.y-b.h/2},t=Math.min(p.y,q.y)-40-dx*.1;return{d:`M${p.x},${p.y}C${p.x},${t} ${q.x},${t} ${q.x},${q.y}`,m:{x:(p.x+q.x)/2,y:(p.y+q.y)/2*.25+t*.75},H:1}}
+const p={x:a.x+a.w/2,y:a.y},q={x:b.x+b.w/2,y:b.y},r=Math.max(p.x,q.x)+40+dy*.1;return{d:`M${p.x},${p.y}C${r},${p.y} ${r},${q.y} ${q.x},${q.y}`,m:{x:(p.x+q.x)/2*.25+r*.75,y:(p.y+q.y)/2},H:0}}
+const is3=n=>$('#d3').checked&&T[n.type].s;
+function bb(n){if(is3(n)){const k=n.z/2,fx=n.x-k/2,fy=n.y+k/2;return{l:fx-n.th/2,r:fx+n.th/2+k,t:fy-n.hh/2-k,b:fy+n.hh/2,cx:n.x,cy:n.y,fx,fy,k}}return{l:n.x-n.w/2,r:n.x+n.w/2,t:n.y-n.h/2,b:n.y+n.h/2,cx:n.x,cy:n.y}}
+function dir(a,b){const A=bb(a),B=bb(b),dx=B.cx-A.cx,dy=B.cy-A.cy;return Math.abs(dx)>=Math.abs(dy)?(dx>=0?['east','west']:['west','east']):(dy>=0?['south','north']:['north','south'])}
+function sp(n,s){const q=bb(n);return{east:{x:q.r,y:q.cy},west:{x:q.l,y:q.cy},north:{x:q.cx,y:q.t},south:{x:q.cx,y:q.b}}[s]}
+const an=(n,s)=>is3(n)?`n${n.id}-${s}`:`n${n.id}.${s}`;
+function tA(a,b,f){const n=f?a:b;return is3(n)?`n${n.id}-${dir(a,b)[f?0:1]}`:'n'+n.id}
+function geo(e){const a=nd(e.a),b=nd(e.b);if(!a||!b)return null;const A=bb(a),B=bb(b);
+if(!e.curve){const A3=is3(a),B3=is3(b),[s1,s2]=dir(a,b),p=A3?sp(a,s1):bd0(a,b.x,b.y),q=B3?sp(b,s2):bd0(b,a.x,a.y);return{d:`M${p.x},${p.y}L${q.x},${q.y}`,m:{x:(p.x+q.x)/2,y:(p.y+q.y)/2},H:0}}
+const dx=Math.abs(B.cx-A.cx),dy=Math.abs(B.cy-A.cy);
+if(dx>=dy){const p={x:A.cx,y:A.t},q={x:B.cx,y:B.t},t=Math.min(p.y,q.y)-40-dx*.1;return{d:`M${p.x},${p.y}C${p.x},${t} ${q.x},${t} ${q.x},${q.y}`,m:{x:(p.x+q.x)/2,y:(p.y+q.y)/2*.25+t*.75},H:1}}
+const p={x:A.r,y:A.cy},q={x:B.r,y:B.cy},r=Math.max(p.x,q.x)+40+dy*.1;return{d:`M${p.x},${p.y}C${r},${p.y} ${r},${q.y} ${q.x},${q.y}`,m:{x:(p.x+q.x)/2*.25+r*.75,y:(p.y+q.y)/2},H:0}}
+function cub(n,s){const q=bb(n),k=q.k,c=n.color,fl=q.fx-n.th/2,fr=q.fx+n.th/2,ft=q.fy-n.hh/2,fb=q.fy+n.hh/2,st=`stroke="${s?'#2563eb':'#333'}" stroke-width="${s?2.2:1.2}" stroke-linejoin="round"`;
+const P=(p,sh)=>`<polygon points="${p}" fill="${c}" ${st}/>`+(sh?`<polygon points="${p}" fill="${sh[0]}" fill-opacity="${sh[1]}"/>`:'');
+return P(`${fl},${fb} ${fr},${fb} ${fr},${ft} ${fl},${ft}`)+P(`${fl},${ft} ${fr},${ft} ${fr+k},${ft-k} ${fl+k},${ft-k}`,['#fff',.45])+P(`${fr},${fb} ${fr+k},${fb-k} ${fr+k},${ft-k} ${fr},${ft}`,['#000',.2])+`<text x="${q.cx}" y="${q.b+14}" text-anchor="middle" font-size="11" fill="currentColor">${x(n.label)}</text>`+(n.sub?`<text x="${q.cx}" y="${q.b+26}" text-anchor="middle" font-size="10" fill="currentColor" opacity=".7">${x(n.sub)}</text>`:'')}
+function cubT(n,id,cn){const q=bb(n),k=q.k,f=v=>+(v/50).toFixed(2),P=(x,y)=>`(${f(x)},${f(-y)})`,c=cn(n.color),fl=q.fx-n.th/2,fr=q.fx+n.th/2,ft=q.fy-n.hh/2,fb=q.fy+n.hh/2;
+return `\\draw[fill=${c}] ${P(fl,fb)} rectangle ${P(fr,ft)};\n\\draw[fill=${c}!55!white] ${P(fl,ft)} -- ${P(fr,ft)} -- ${P(fr+k,ft-k)} -- ${P(fl+k,ft-k)} -- cycle;\n\\draw[fill=${c}!80!black] ${P(fr,fb)} -- ${P(fr+k,fb-k)} -- ${P(fr+k,ft-k)} -- ${P(fr,ft)} -- cycle;\n`+[['north','cx','t'],['south','cx','b'],['east','r','cy'],['west','l','cy']].map(([m,u,w])=>`\\coordinate (${id}-${m}) at ${P(q[u],q[w])};\n`).join('')+`\\coordinate (${id}) at ${P(q.cx,q.cy)};\n\\node[anchor=north, align=center, font=\\scriptsize] at ${P(q.cx,q.b)} {${esc(n.label)}${n.sub?`\\\\{\\tiny ${esc(n.sub)}}`:''}};\n`}
+let H=[],R=[];const cur=()=>JSON.stringify({nodes:S.nodes,edges:S.edges,uid:S.uid});
+function hist(){H.push(cur());if(H.length>60)H.shift();R=[]}
+function rest(j){const o=JSON.parse(j);S.nodes=o.nodes;S.edges=o.edges;S.uid=o.uid;S.sel=null;all()}
+function undo(){if(!H.length)return;R.push(cur());rest(H.pop())}
+function redo(){if(!R.length)return;H.push(cur());rest(R.pop())}
+function dup(){const s=S.sel;if(!s||!s.type)return;hist();const n={...s,id:S.uid++,x:s.x+30,y:s.y+30};S.nodes.push(n);S.sel=n;all()}
+const MODS={
+simam:{n:[['x','input',0,0,{label:'$X$'}],['mu','act',130,0,{label:'$\\mu,\\sigma^2$'}],['en','act',240,0,{label:'Energy',sub:'$e^{-1}$'}],['sg','sig',340,0],['m','mul',430,0],['o','output',540,0,{label:'$\\tilde X$'}]],e:[['x','mu'],['mu','en'],['en','sg'],['sg','m'],['x','m',1],['m','o']]},
+se:{n:[['x','input',0,0,{label:'$X$'}],['g','pool',120,0,{label:'GAP'}],['f1','dense',210,0,{label:'FC',sub:'$C/r$'}],['r','act',290,0],['f2','dense',370,0,{label:'FC',sub:'$C$'}],['sg','sig',450,0],['m','mul',530,0],['o','output',630,0,{label:'$\\hat X$'}]],e:[['x','g'],['g','f1'],['f1','r'],['r','f2'],['f2','sg'],['sg','m'],['x','m',1],['m','o']]},
+eca:{n:[['x','input',0,0,{label:'$X$'}],['g','pool',120,0,{label:'GAP'}],['c','conv',220,0,{label:'Conv1D',sub:'$k$'}],['sg','sig',320,0],['m','mul',410,0],['o','output',510,0,{label:'$\\hat X$'}]],e:[['x','g'],['g','c'],['c','sg'],['sg','m'],['x','m',1],['m','o']]},
+cbam:{n:[['x','input',0,0,{label:'$X$'}],['ca','attn',130,0,{label:'Channel Attn'}],['m1','mul',250,0],['sa','attn',360,0,{label:'Spatial Attn'}],['m2','mul',480,0],['o','output',580,0,{label:'$\\hat X$'}]],e:[['x','ca'],['ca','m1'],['x','m1',1],['m1','sa'],['sa','m2'],['m1','m2',1],['m2','o']]},
+mhsa:{n:[['x','input',0,0,{label:'$X$'}],['q','dense',130,-110,{label:'$Q$'}],['k','dense',130,0,{label:'$K$'}],['v','dense',130,110,{label:'$V$'}],['mm','mat',250,-55],['sc','act',330,-55,{label:'Scale',sub:'$1/\\sqrt{d_k}$'}],['sm','soft',430,-55],['m2','mat',530,0],['l','dense',620,0,{label:'Linear',sub:'$W^O$'}],['o','output',720,0]],e:[['x','q'],['x','k'],['x','v'],['q','mm'],['k','mm'],['mm','sc'],['sc','sm'],['sm','m2'],['v','m2'],['m2','l'],['l','o']]},
+transformer:{g:[400,0,620,210,'$\\times N$'],n:[['x','input',0,0,{label:'Embedding'}],['n1','norm',130,0],['a','attn',240,0,{label:'Multi-Head Attn'}],['p1','add',350,0],['n2','norm',440,0],['f','dense',540,0,{label:'FFN'}],['p2','add',640,0],['o','output',780,0,{label:'Softmax'}]],e:[['x','n1'],['n1','a'],['a','p1'],['p1','n2'],['n2','f'],['f','p2'],['p2','o'],['x','p1',1],['p1','p2',1]]},
+res:{n:[['x','input',0,0,{label:'$x$'}],['c1','conv',110,0,{sub:'3×3'}],['b1','norm',200,0,{label:'BN'}],['r1','act',280,0],['c2','conv',370,0,{sub:'3×3'}],['b2','norm',460,0,{label:'BN'}],['p','add',550,0],['r2','act',630,0],['o','output',730,0,{label:'$y$'}]],e:[['x','c1'],['c1','b1'],['b1','r1'],['r1','c2'],['c2','b2'],['b2','p'],['p','r2'],['r2','o'],['x','p',1,{label:'identity'}]]}};
+function insMod(k){const m=MODS[k];if(!m)return;hist();const mn=Math.min(...m.n.map(a=>a[3])),top=S.nodes.length?Math.max(...S.nodes.map(n=>bb(n).b))+70:40,oy=snap(top+90-mn),ox=80,ks={};
+if(m.g)addNode('group',ox+m.g[0],oy+m.g[1],{w:m.g[2],h:m.g[3],label:m.g[4]});
+m.n.forEach(([id,t,dx,dy,o])=>{ks[id]=addNode(t,snap(ox+dx),snap(oy+dy),o||{})});
+m.e.forEach(([a,b,c,o])=>addEdge(ks[a].id,ks[b].id,!!c,o||{}));S.sel=null;all();$('#cv').scrollTo({top:Math.max(0,oy-200),behavior:'smooth'})}
+function canvas(){let h='<defs><marker id="ar" markerWidth="9" markerHeight="9" refX="8" refY="4.5" orient="auto"><path d="M0,0L9,4.5L0,9z" fill="currentColor"/></marker></defs>';
+const ns=[...S.nodes].sort((a,b)=>(T[b.type].group?1:0)-(T[a.type].group?1:0));
+for(const e of S.edges){const g=geo(e);if(!g)continue;const s=S.sel==e;
+h+=`<g data-e="${e.id}" style="color:${s?'var(--ac)':'var(--fg)'}"><path d="${g.d}" fill="none" stroke="transparent" stroke-width="14"/><path d="${g.d}" fill="none" stroke="currentColor" stroke-width="${s?2.5:1.6}" ${e.dash?'stroke-dasharray="6 4"':''} marker-end="url(#ar)"/>${e.label?`<text x="${g.m.x}" y="${g.m.y-6}" text-anchor="middle" font-size="11" fill="currentColor">${x(e.label)}</text>`:''}</g>`}
+for(const n of ns){const d=T[n.type],s=S.sel==n,L=n.x-n.w/2,Tp=n.y-n.h/2;let b='';
+if(is3(n))b=cub(n,s);else if(d.group)b=`<rect x="${L}" y="${Tp}" width="${n.w}" height="${n.h}" rx="10" fill="none" stroke="${s?'var(--ac)':'#888'}" stroke-width="1.6" stroke-dasharray="6 4" pointer-events="stroke"/><text x="${L+n.w-8}" y="${Tp+n.h-8}" text-anchor="end" font-size="12" fill="#888">${x(n.label)}</text><rect x="${L+n.w-80}" y="${Tp+n.h-24}" width="80" height="24" fill="transparent"/>`;
+else{const st=`fill="${d.plain?'none':n.color}" stroke="${d.plain?'none':s?'#2563eb':'#333'}" stroke-width="${s?2.5:1.4}"`;
+b=(d.circ?`<circle cx="${n.x}" cy="${n.y}" r="${n.w/2}" ${st}/>`:`<rect x="${L}" y="${Tp}" width="${n.w}" height="${n.h}" rx="${d.plain?0:5}" ${st}/>`)+`<text x="${n.x}" y="${n.sub?n.y-6:n.y}" text-anchor="middle" dominant-baseline="central" font-size="12" fill="${d.plain?'currentColor':'#111'}">${x(n.label)}</text>`+(n.sub?`<text x="${n.x}" y="${n.y+9}" text-anchor="middle" dominant-baseline="central" font-size="10" fill="#444">${x(n.sub)}</text>`:'')}
+h+=`<g class="node${s?' sel':''}" data-n="${n.id}" style="cursor:move">${b}${d.group?'':`<circle class="h" data-h="${n.id}" cx="${bb(n).r+7}" cy="${bb(n).cy}" r="5"/>`}</g>`}
+if(drag&&drag.k=='c'){const a=nd(drag.id);h+=`<line x1="${bb(a).r}" y1="${bb(a).cy}" x2="${drag.x}" y2="${drag.y}" stroke="var(--ac)" stroke-dasharray="4 3"/>`}
+svg.innerHTML=h}
+const x=s=>String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;');
+function tikz(){const cols={};const cn=c=>cols[c]||(cols[c]='c'+Object.keys(cols).length);const f=v=>+(v/50).toFixed(2),X=n=>f(n.x),Y=n=>f(-n.y);let o='';
+const ns=[...S.nodes].sort((a,b)=>(T[b.type].group?1:0)-(T[a.type].group?1:0));
+for(const n of ns){const d=T[n.type],id='n'+n.id;if(is3(n)){o+=cubT(n,id,cn);continue}
+if(d.group){o+=`\\draw[dashed, rounded corners=4pt, gray] (${f(n.x-n.w/2)},${f(-n.y-n.h/2)}) rectangle (${f(n.x+n.w/2)},${f(-n.y+n.h/2)});\n\\node[anchor=south east, font=\\scriptsize] at (${f(n.x+n.w/2)},${f(-n.y-n.h/2)}) {${esc(n.label)}};\n`;continue}
+if(d.plain){o+=`\\node (${id}) at (${X(n)},${Y(n)}) {${esc(n.label)}};\n`;continue}
+const fill=n.color.toLowerCase()=='#ffffff'?'':`, fill=${cn(n.color)}`;
+if(d.circ)o+=`\\node[draw, circle${fill}, inner sep=0pt, minimum size=${f(n.w)}cm] (${id}) at (${X(n)},${Y(n)}) {${esc(n.label)}};\n`;
+else o+=`\\node[draw, rounded corners=2pt${fill}, align=center, minimum width=${f(n.w)}cm, minimum height=${f(n.h)}cm] (${id}) at (${X(n)},${Y(n)}) {${esc(n.label)}${n.sub?`\\\\{\\scriptsize ${esc(n.sub)}}`:''}};\n`}
+o+='\n';
+for(const e of S.edges){const a=nd(e.a),b=nd(e.b);if(!a||!b)continue;const A='n'+a.id,B='n'+b.id,op=e.dash?'->, dashed':'->',lb=e.label?` node[midway, ${e.curve&&geo(e).H?'above':'above'}, font=\\scriptsize] {${esc(e.label)}}`:'';
+if(!e.curve)o+=`\\draw[${op}] (${tA(a,b,1)}) --${lb} (${tA(a,b,0)});\n`;
+else if(geo(e).H)o+=`\\draw[${op}] (${an(a,'north')}) to[out=90, in=90, looseness=1.3]${lb} (${an(b,'north')});\n`;
+else o+=`\\draw[${op}] (${an(a,'east')}) to[out=0, in=0, looseness=1.5]${lb} (${an(b,'east')});\n`}
+const defs=Object.entries(cols).map(([c,n])=>`\\definecolor{${n}}{HTML}{${c.slice(1).toUpperCase()}}\n`).join('');
+let r=`${defs}\\begin{tikzpicture}[>={Stealth[length=2mm]}, font=\\small]\n${o}\\end{tikzpicture}\n`;
+if($('#sa').checked)r=`\\documentclass[tikz,border=5pt]{standalone}\n\\usepackage{xcolor}\n\\usetikzlibrary{arrows.meta}\n\\begin{document}\n${r}\\end{document}\n`;else r=`% needs: \\usepackage{tikz,xcolor} \\usetikzlibrary{arrows.meta}\n`+r;
+$('#out').value=r}
+function panel(){const s=S.sel,p=$('#props');if(!s){p.innerHTML='<i>Nothing selected. Add a block from the left, then click it.</i>';return}
+if(s.type){const g=T[s.type].group;p.innerHTML=`<b>${N[s.type]}</b><label>Label<input type="text" data-f="label" value="${x(s.label).replace(/"/g,'&quot;')}"></label>${T[s.type].circ?`<label>Operator<select data-f="label">${['+','⊕','⊗','⊙','×','−','÷','σ','tanh','C'].map(o=>`<option${o==s.label?' selected':''}>${o}</option>`).join('')}</select></label>`:''}${g||T[s.type].plain?'':`<label>Subtitle<input type="text" data-f="sub" value="${x(s.sub).replace(/"/g,'&quot;')}"></label><label>Fill<input type="color" data-f="color" value="${s.color}"></label>`}${is3(s)?`<label>Thickness (channels)<input type="number" data-f="th" value="${s.th}"></label><label>Height<input type="number" data-f="hh" value="${s.hh}"></label><label>Depth<input type="number" data-f="z" value="${s.z}"></label>`:`<label>Width<input type="number" data-f="w" value="${s.w}"></label><label>Height<input type="number" data-f="h" value="${s.h}"></label>`}`}
+else p.innerHTML=`<b>Edge</b><label>Label<input type="text" data-f="label" value="${x(s.label).replace(/"/g,'&quot;')}"></label><label>Curved (skip / residual)<input type="checkbox" data-f="curve" ${s.curve?'checked':''}></label><label>Dashed<input type="checkbox" data-f="dash" ${s.dash?'checked':''}></label><button id="rev">Reverse direction</button>`;
+const rv=$('#rev');if(rv)rv.onclick=()=>{[s.a,s.b]=[s.b,s.a];all()}}
+$('#props').onfocusin=()=>hist();$('#props').oninput=e=>{const f=e.target.dataset.f;if(!f||!S.sel)return;const v=e.target.type=='checkbox'?e.target.checked:e.target.type=='number'?+e.target.value||10:e.target.value;S.sel[f]=v;canvas();tikz();if(e.target.type=='checkbox'||e.target.tagName=='SELECT')panel()};
+function all(){canvas();tikz();panel()}
+const pt=e=>{const r=svg.getBoundingClientRect();return{x:e.clientX-r.left,y:e.clientY-r.top}};
+svg.addEventListener('mousedown',e=>{const p=pt(e),h=e.target.closest('[data-h]'),n=e.target.closest('[data-n]'),ed=e.target.closest('[data-e]');
+if(h){drag={k:'c',id:+h.dataset.h,x:p.x,y:p.y};return}
+if(n){const o=nd(n.dataset.n);const ch=S.sel!=o;S.sel=o;drag={k:'m',o,dx:p.x-o.x,dy:p.y-o.y};if(ch)all();return}
+S.sel=ed?S.edges.find(q=>q.id==ed.dataset.e):null;all()});
+addEventListener('mousemove',e=>{if(!drag)return;const p=pt(e);if(drag.k=='m'){if(!drag.h){hist();drag.h=1}drag.o.x=snap(p.x-drag.dx);drag.o.y=snap(p.y-drag.dy);canvas();tikz()}else{drag.x=p.x;drag.y=p.y;canvas()}});
+addEventListener('mouseup',e=>{if(!drag)return;if(drag.k=='c'){const t=document.elementFromPoint(e.clientX,e.clientY)?.closest('[data-n]');if(t){hist();const ed=addEdge(drag.id,+t.dataset.n,$('#curve').checked);if(ed)S.sel=ed;else H.pop()}}drag=null;all()});
+addEventListener('keydown',e=>{if(/INPUT|TEXTAREA|SELECT/.test(e.target.tagName))return;const k=e.key,m=e.ctrlKey||e.metaKey;
+if(k=='Delete'||k=='Backspace'){e.preventDefault();del()}
+else if(m&&k.toLowerCase()=='z'){e.preventDefault();e.shiftKey?redo():undo()}
+else if(m&&k.toLowerCase()=='y'){e.preventDefault();redo()}
+else if(m&&k.toLowerCase()=='d'){e.preventDefault();dup()}
+else if(S.sel&&S.sel.type&&k.startsWith('Arrow')){e.preventDefault();hist();const s=e.shiftKey?40:10;S.sel.x+=k=='ArrowRight'?s:k=='ArrowLeft'?-s:0;S.sel.y+=k=='ArrowDown'?s:k=='ArrowUp'?-s:0;all()}});
+function del(){const s=S.sel;if(!s)return;hist();if(s.type){S.nodes=S.nodes.filter(n=>n!=s);S.edges=S.edges.filter(e=>e.a!=s.id&&e.b!=s.id)}else S.edges=S.edges.filter(e=>e!=s);S.sel=null;all()}
+$('#del').onclick=del;$('#clr').onclick=()=>{hist();S={nodes:[],edges:[],sel:null,uid:1};all()};
+$('#sa').onchange=tikz;$('#d3').onchange=all;$('#un').onclick=undo;$('#re').onclick=redo;$('#dp').onclick=dup;$('#mods').onchange=e=>{insMod(e.target.value);e.target.value=''};
+$('#cp').onclick=async()=>{try{await navigator.clipboard.writeText($('#out').value)}catch(_){$('#out').select();document.execCommand('copy')}$('#cp').textContent='Copied ✓';setTimeout(()=>$('#cp').textContent='Copy TikZ',1200)};
+$('#sv').onclick=async()=>{const j=JSON.stringify({nodes:S.nodes,edges:S.edges,uid:S.uid});try{await navigator.clipboard.writeText(j);$('#sv').textContent='Copied ✓'}catch(_){prompt('Copy this JSON',j)}setTimeout(()=>$('#sv').textContent='Copy JSON',1200)};
+$('#ld').onclick=()=>{const j=prompt('Paste JSON');if(!j)return;try{const o=JSON.parse(j);hist();S={nodes:o.nodes,edges:o.edges,uid:o.uid||999,sel:null};all()}catch(_){alert('Invalid JSON')}};
+function chain(ids,y,x0,step){return ids.map((t,i)=>{const [ty,o]=Array.isArray(t)?t:[t,{}];return addNode(ty,x0+i*step,y,o)})}
+function link(ns){for(let i=0;i<ns.length-1;i++)addEdge(ns[i].id,ns[i+1].id)}
+function ex1(){hist();S={nodes:[],edges:[],sel:null,uid:1};const n=chain([['input',{label:'$x$'}],['conv',{sub:'64 ch'}],['norm',{label:'BatchNorm'}],'act',['conv',{sub:'64 ch'}],['norm',{label:'BatchNorm'}],'add','act','output'],300,100,120);link(n);addEdge(n[0].id,n[6].id,true,{label:'identity'});all()}
+function ex2(){hist();S={nodes:[],edges:[],sel:null,uid:1};const g=addNode('group',480,330,{w:700,h:200,label:'$\\times N$'});const n=chain([['input',{label:'Embedding'}],['norm'],['attn',{label:'Multi-Head Attn'}],'add',['norm'],['dense',{label:'FFN'}],'add',['output',{label:'Softmax'}]],330,80,95);n[2].w=110;n[0].x=60;n[7].x=900;n[1].x=210;n[2].x=330;n[3].x=450;n[4].x=540;n[5].x=640;n[6].x=740;n[7].x=900;g.x=480;g.w=620;link(n);addEdge(n[0].id,n[3].id,true);addEdge(n[3].id,n[6].id,true);all()}
+$('#ex1').onclick=ex1;$('#ex2').onclick=ex2;ex1();
+</script></body></html>
